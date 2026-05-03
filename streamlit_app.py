@@ -2,33 +2,28 @@ import streamlit as st
 import ephem
 import datetime
 import requests
+import pandas as pd
 from geopy.geocoders import Nominatim
 
-# --- CONFIGURATION & SECRETS ---
-# Ensure these are set in the Streamlit Cloud "Secrets" tab
-WEATHER_API_KEY = st.secrets.get("b8f2bbfb54a879f5c173bbc112f9807a")
+# --- CONFIGURATION ---
+# Set your OpenWeatherMap API key in Streamlit Secrets
+WEATHER_API_KEY = st.secrets.get("WEATHER_KEY")
 
 # Initialize Geocoder
-geolocator = Nominatim(user_agent="milky_way_tracker_v1")
+geolocator = Nominatim(user_agent="milky_way_tracker_v2")
 
-def get_astronomy_data(lat, lon):
+def get_astronomy_data(lat, lon, date=None):
     obs = ephem.Observer()
     obs.lat, obs.lon = str(lat), str(lon)
-    obs.date = datetime.datetime.utcnow()
+    obs.date = date if date else datetime.datetime.utcnow()
 
-    # Sun position for darkness check
     sun = ephem.Sun(obs)
-    sun.compute(obs)
-    sun_alt = sun.alt * 57.2958 # Radians to Degrees
+    sun_alt = sun.alt * 57.2958
     
-    # Moon position and phase
     moon = ephem.Moon(obs)
-    moon.compute(obs)
     moon_alt = moon.alt * 57.2958
-    moon_phase = moon.phase # 0 to 100
+    moon_phase = moon.phase
     
-    # Galactic Center (Sagittarius A*)
-    # RA: 17:45:40, Dec: -29:00:28
     ga_center = ephem.FixedBody()
     ga_center._ra = '17:45:40'
     ga_center._dec = '-29:00:28'
@@ -36,126 +31,106 @@ def get_astronomy_data(lat, lon):
     core_alt = ga_center.alt * 57.2958
 
     return {
-        "is_dark": sun_alt < -18, # Astronomical Twilight
+        "is_dark": sun_alt < -18,
         "sun_alt": sun_alt,
         "moon_visible": moon_alt > 0,
-        "moon_alt": moon_alt,
         "moon_phase": moon_phase,
         "core_alt": core_alt
     }
 
-def get_weather(lat, lon):
+def get_weather_and_forecast(lat, lon):
     if not WEATHER_API_KEY:
-        return None
+        st.error("Missing Weather API Key in Secrets!")
+        return None, None
     
-    url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=imperial"
+    # Current Weather
+    curr_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=imperial"
+    # 5-Day Forecast
+    fore_url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=imperial"
+    
     try:
-        response = requests.get(url)
-        data = response.json()
-        return {
-            "clouds": data['clouds']['all'],
-            "temp": data['main']['temp'],
-            "city_name": data['name']
-        }
+        curr_data = requests.get(curr_url).json()
+        fore_data = requests.get(fore_url).json()
+        return curr_data, fore_data
     except:
-        return None
+        return None, None
 
-# --- STREAMLIT UI SETUP ---
-st.set_page_config(page_title="Milky Way Tracker", page_icon="🌌", layout="centered")
-
+# --- UI SETUP ---
+st.set_page_config(page_title="Milky Way Tracker Pro", page_icon="🌌")
 st.title("🌌 Milky Way Visibility Tracker")
-st.markdown("Check if the Galactic Core is visible from your location tonight.")
 
-# --- SIDEBAR LOCATION SEARCH ---
-st.sidebar.header("📍 Set Location")
-city_input = st.sidebar.text_input("Enter City, State or Landmark", "Woodstock, VT")
+# Sidebar Location
+st.sidebar.header("📍 Location Settings")
+city_input = st.sidebar.text_input("Enter City/State", "Woodstock, VT")
 
-# Geocoding logic
 try:
     location = geolocator.geocode(city_input, timeout=10)
     if location:
         lat, lon = location.latitude, location.longitude
-        st.sidebar.success(f"Location Found!")
-        st.sidebar.write(f"**{location.address}**")
+        st.sidebar.success(f"Viewing: {location.address.split(',')[0]}")
     else:
-        st.sidebar.error("Location not found. Using default coordinates.")
         lat, lon = 43.6245, -72.5187
 except:
-    st.sidebar.warning("Geocoding service timed out. Using default.")
     lat, lon = 43.6245, -72.5187
 
-# --- DATA PROCESSING ---
-astro = get_astronomy_data(lat, lon)
-weather = get_weather(lat, lon)
+# --- DATA FETCHING ---
+curr_w, fore_w = get_weather_and_forecast(lat, lon)
+astro_now = get_astronomy_data(lat, lon)
 
-# --- VISIBILITY LOGIC ---
-is_clear = weather['clouds'] < 25 if weather else False
-is_dark_enough = astro['is_dark']
-is_core_up = astro['core_alt'] > 0
-# Moon is favorable if it's below horizon OR if it's a very slim crescent
-is_moon_ok = (not astro['moon_visible']) or (astro['moon_phase'] < 15)
+# --- CURRENT STATUS ---
+if curr_w:
+    clouds_now = curr_w['clouds']['all']
+    is_clear = clouds_now < 25
+    is_dark = astro_now['is_dark']
+    is_core_up = astro_now['core_alt'] > 0
+    is_moon_ok = (not astro_now['moon_visible']) or (astro_now['moon_phase'] < 15)
 
-# Calculate Final Score
-if is_clear and is_dark_enough and is_core_up and is_moon_ok:
-    st.balloons()
-    st.success("### ✅ THE MILKY WAY IS VISIBLE!")
-    st.write("Conditions are perfect. Grab your camera and head to a dark spot.")
-else:
-    st.error("### ❌ NOT VISIBLE RIGHT NOW")
+    if is_clear and is_dark and is_core_up and is_moon_ok:
+        st.balloons()
+        st.success("✅ PERFECT CONDITIONS RIGHT NOW!")
+    else:
+        st.warning("🔭 Conditions aren't perfect yet. Check the forecast below.")
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Cloud Cover", f"{clouds_now}%")
+    col2.metric("Core Altitude", f"{astro_now['core_alt']:.1f}°")
+    col3.metric("Moon Phase", f"{astro_now['moon_phase']:.0f}%" if astro_now['moon_visible'] else "Down")
+
+# --- FORECAST & CHART ---
+if fore_w:
+    st.divider()
+    st.header("📈 5-Day Visibility Forecast")
     
-# --- DASHBOARD METRICS ---
-st.divider()
-col1, col2, col3 = st.columns(3)
-def get_forecast_data(lat, lon):
-    if not WEATHER_API_KEY:
-        return []
-    
-    # OpenWeatherMap 5-day/3-hour forecast URL
-    url = f"http://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=imperial"
-    response = requests.get(url).json()
-    
-    forecast_list = []
-    obs = ephem.Observer()
-    obs.lat, obs.lon = str(lat), str(lon)
-
-    # The Core coordinates
-    ga_center = ephem.FixedBody()
-    ga_center._ra = '17:45:40'
-    ga_center._dec = '-29:00:28'
-
-    for entry in response.get('list', []):
+    forecast_records = []
+    for entry in fore_w['list']:
         dt = datetime.datetime.fromtimestamp(entry['dt'])
-        obs.date = dt
+        a = get_astronomy_data(lat, lon, date=dt)
         
-        # Calculate Astro data for this future time
-        sun = ephem.Sun(obs)
-        ga_center.compute(obs)
-        moon = ephem.Moon(obs)
-        
-        core_alt = ga_center.alt * 57.2958
-        sun_alt = sun.alt * 57.2958
-        clouds = entry['clouds']['all']
-        
-        # Logic: Dark + Core Up + Clear
-        is_visible = sun_alt < -12 and core_alt > 0 and clouds < 30
-        
-        forecast_list.append({
-            "time": dt.strftime("%a %I%p"),
-            "clouds": clouds,
-            "core_alt": core_alt,
-            "visible": is_visible
+        forecast_records.append({
+            "Time": dt,
+            "Core Altitude": max(0, a['core_alt']),
+            "Cloud Cover": entry['clouds']['all']
         })
-    return forecast_list
-    st.header("📅 5-Day Visibility Roadmap")
-forecast = get_forecast_data(lat, lon)
+    
+    df = pd.DataFrame(forecast_records)
+    
+    # Render the Chart
+    st.subheader("Plan Your Session")
+    st.line_chart(df.set_index("Time"), color=["#FF4B4B", "#1F77B4"])
+    st.caption("🔴 Red = Core Height (Higher is better) | 🔵 Blue = Cloud Cover (Lower is better)")
 
-if forecast:
-    # We only care about the windows where the Milky Way is technically "Up"
-    cols = st.columns(len(forecast[:12])) # Show next 36 hours
-    for i, day in enumerate(forecast[:12]):
-        with cols[i]:
-            st.caption(day['time'])
-            if day['visible']:
-                st.write("🌌 **YES**")
-            else:
-                st.write("☁️" if day['clouds'] > 30 else "🚫")
+    # 5-Day Roadmap (Condensed)
+    st.subheader("Best Windows")
+    road_cols = st.columns(5)
+    # Group by day and find best windows
+    for i in range(5):
+        day_data = df.iloc[i*8 : (i+1)*8] # 3-hour increments
+        day_name = day_data['Time'].iloc[0].strftime("%a")
+        with road_cols[i]:
+            best_hour = day_data.loc[day_data['Core Altitude'].idxmax()]
+            is_good = best_hour['Core Altitude'] > 0 and best_hour['Cloud Cover'] < 20
+            st.write(f"**{day_name}**")
+            st.write("🌌 OK" if is_good else "☁️ No")
+
+st.divider()
+st.info("💡 **Pro-Tip:** The best shots are taken during 'Astronomical Night' when the sun is below -18°.")
