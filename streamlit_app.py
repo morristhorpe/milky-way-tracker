@@ -1,5 +1,4 @@
-port streamlit as st
-import ephem
+import streamlit as stimport ephem
 import datetime
 import requests
 
