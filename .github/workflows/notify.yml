@@ -1,0 +1,24 @@
+name: Nightly Milky Way Check
+on:
+  schedule:
+    - cron: '0 22 * * *' # Runs at 10 PM every night
+  workflow_dispatch: # Allows you to run it manually for testing
+
+jobs:
+  check-sky:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      - name: Install dependencies
+        run: pip install ephem requests twilio
+      - name: Run Check
+        env:
+          WEATHER_KEY: ${{ secrets.WEATHER_KEY }}
+          TWILIO_SID: ${{ secrets.TWILIO_SID }}
+          TWILIO_TOKEN: ${{ secrets.TWILIO_TOKEN }}
+        run: python app.py --notify # Note: You'll add a small 'if --notify' block to your code
