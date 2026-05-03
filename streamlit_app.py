@@ -57,6 +57,45 @@ def get_weather_and_forecast(lat, lon):
 
 # --- UI SETUP ---
 st.set_page_config(page_title="Milky Way Tracker Pro", page_icon="🌌")
+# --- CUSTOM CSS ---
+st.markdown("""
+    <style>
+    /* Background and Main Container */
+    .stApp {
+        background: linear-gradient(to bottom, #000428, #004e92);
+        color: #ffffff;
+    }
+    
+    /* Custom Sidebar */
+    [data-testid="stSidebar"] {
+        background-color: rgba(0, 0, 0, 0.5);
+    }
+    
+    /* Glassmorphism Cards for Metrics */
+    div[data-testid="stMetric"] {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        padding: 15px;
+        border-radius: 15px;
+        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+        backdrop-filter: blur(5px);
+    }
+    
+    /* Glowing Success Header */
+    .stSuccess {
+        background-color: rgba(0, 255, 127, 0.1) !important;
+        border: 1px solid #00ff7f !important;
+        color: #00ff7f !important;
+        text-shadow: 0 0 10px #00ff7f;
+    }
+    
+    /* Metric Labels */
+    label[data-testid="stMetricLabel"] {
+        color: #8892b0 !important;
+        font-weight: bold;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 st.title("🌌 Milky Way Visibility Tracker")
 
 # Sidebar Location
