@@ -105,4 +105,4 @@ else:
     
 # --- DASHBOARD METRICS ---
 st.divider()
-col1, col2,
+col1, col2, col3 = st.columns(3)
