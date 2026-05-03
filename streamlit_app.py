@@ -6,7 +6,7 @@ from geopy.geocoders import Nominatim
 
 # --- CONFIGURATION & SECRETS ---
 # Ensure these are set in the Streamlit Cloud "Secrets" tab
-WEATHER_API_KEY = st.secrets.get("WEATHER_KEY")
+WEATHER_API_KEY = st.secrets.get("b8f2bbfb54a879f5c173bbc112f9807a")
 
 # Initialize Geocoder
 geolocator = Nominatim(user_agent="milky_way_tracker_v1")
