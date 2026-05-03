@@ -106,3 +106,56 @@ else:
 # --- DASHBOARD METRICS ---
 st.divider()
 col1, col2, col3 = st.columns(3)
+def get_forecast_data(lat, lon):
+    if not WEATHER_API_KEY:
+        return []
+    
+    # OpenWeatherMap 5-day/3-hour forecast URL
+    url = f"http://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=imperial"
+    response = requests.get(url).json()
+    
+    forecast_list = []
+    obs = ephem.Observer()
+    obs.lat, obs.lon = str(lat), str(lon)
+
+    # The Core coordinates
+    ga_center = ephem.FixedBody()
+    ga_center._ra = '17:45:40'
+    ga_center._dec = '-29:00:28'
+
+    for entry in response.get('list', []):
+        dt = datetime.datetime.fromtimestamp(entry['dt'])
+        obs.date = dt
+        
+        # Calculate Astro data for this future time
+        sun = ephem.Sun(obs)
+        ga_center.compute(obs)
+        moon = ephem.Moon(obs)
+        
+        core_alt = ga_center.alt * 57.2958
+        sun_alt = sun.alt * 57.2958
+        clouds = entry['clouds']['all']
+        
+        # Logic: Dark + Core Up + Clear
+        is_visible = sun_alt < -12 and core_alt > 0 and clouds < 30
+        
+        forecast_list.append({
+            "time": dt.strftime("%a %I%p"),
+            "clouds": clouds,
+            "core_alt": core_alt,
+            "visible": is_visible
+        })
+    return forecast_list
+    st.header("📅 5-Day Visibility Roadmap")
+forecast = get_forecast_data(lat, lon)
+
+if forecast:
+    # We only care about the windows where the Milky Way is technically "Up"
+    cols = st.columns(len(forecast[:12])) # Show next 36 hours
+    for i, day in enumerate(forecast[:12]):
+        with cols[i]:
+            st.caption(day['time'])
+            if day['visible']:
+                st.write("🌌 **YES**")
+            else:
+                st.write("☁️" if day['clouds'] > 30 else "🚫")
